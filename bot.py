@@ -1,47 +1,46 @@
 import os
 import re
-import random
-from aiogram import Bot, Dispatcher, types
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from aiogram.utils import executor
+import logging
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
-API_TOKEN = os.getenv("BOT_TOKEN")
-bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot)
+TOKEN = os.getenv('BOT_TOKEN')
 
-styles = [
-    ["🔥", "🚀", "⚡", "🎯", "🌈"],
-    ["💎", "✨", "🎉", "🟢", "🔵"],
-    ["💥", "🧨", "🌟", "🪐", "🎁"],
-    ["🥇", "🏆", "🎖️", "🎯", "🎇"],
-    ["👑", "💫", "🔮", "🧿", "🌀"]
-]
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-link_pattern = r'(https?://\S+|t\.me/\S+)'
+# /start command
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("👋 Hello bhai! Bas mujhe koi photo bhej jisme t.me link ho caption mein, main link ko button bana dunga! 🚀")
 
-@dp.message_handler(content_types=types.ContentType.PHOTO)
-async def handle_photo_with_link(message: types.Message):
-    if message.caption:
-        links = re.findall(link_pattern, message.caption)
-        text_without_links = re.sub(link_pattern, '', message.caption).strip()
-        
-        if links:
-            style_pack = random.choice(styles)
-            keyboard = InlineKeyboardMarkup(row_width=1)
-            for idx, link in enumerate(links, start=1):
-                left = random.choice(style_pack)
-                right = random.choice(style_pack)
-                button_text = f"{left} Visit Link {idx} {right}"
-                button_url = link if link.startswith('http') else f"https://{link}"
-                keyboard.add(InlineKeyboardButton(button_text, url=button_url))
-            
-            final_caption = f"{text_without_links}\n\n🚀 Powered by @skillwithgaurav"
-            await message.reply_photo(
-                message.photo[-1].file_id,
-                caption=final_caption,
-                reply_markup=keyboard
-            )
+# photo handler
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    caption = update.message.caption
+    link_pattern = r'(https?://t\.me/[^\s]+|t\.me/[^\s]+)'
+    links = re.findall(link_pattern, caption or '')
 
-if __name__ == "__main__":
-    executor.start_polling(dp)
+    if links:
+        button_link = links[0]
+        caption_text = re.sub(link_pattern, '', caption).strip()  # baaki text rehne do
+        keyboard = [
+            [InlineKeyboardButton("👉 JOIN HERE 🚀", url=button_link)],
+            [InlineKeyboardButton("🔗 Powered by @skillwithgaurav", url="https://t.me/skillwithgaurav")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_photo(
+            photo=update.message.photo[-1].file_id,
+            caption=f"✨ {caption_text}",
+            reply_markup=reply_markup
+        )
 
+# error handler
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.error(msg="Exception while handling an update:", exc_info=context.error)
+
+app = ApplicationBuilder().token(TOKEN).build()
+app.add_handler(CommandHandler("start", start))
+app.add_handler(MessageHandler(filters.PHOTO & filters.CaptionRegex(r't\.me/'), handle_photo))
+app.add_error_handler(error_handler)
+
+if __name__ == '__main__':
+    app.run_polling()
